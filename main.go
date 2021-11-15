@@ -20,14 +20,19 @@ func hash(text string) string {
 }
 
 // pci 호출하는 부분
-func work(bar *mpb.Bar, total int, number int) {
+func work(bar *mpb.Bar, total int, number int, cancel context.CancelFunc) {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	max := 100 * time.Millisecond
 	// FPGA card
 	fmt.Printf("FPGA #%d checking...\n", number)
 	time.Sleep(100 * time.Millisecond)
 	fmt.Printf("FPGA #%d ready!!!\n", number)
+	//bar.IncrBy(number * total)
+	//bar.SetRefill(int64(number * total))
 	for i := 0; i < total; i++ {
+		if i > 1200 {
+			cancel()
+		}
 		if bar.Completed() {
 			break
 		}
@@ -42,12 +47,13 @@ func work(bar *mpb.Bar, total int, number int) {
 
 func consoleRun(maxEnumerate int, numFPGA int, text string) {
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	//ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	p := mpb.NewWithContext(ctx, mpb.WithWaitGroup(&wg))
-
-	total, numBars := maxEnumerate, numFPGA
+	total, numBars := maxEnumerate-1, numFPGA
 	wg.Add(numBars)
 
 	for i := 0; i < numBars; i++ {
@@ -68,11 +74,13 @@ func consoleRun(maxEnumerate int, numFPGA int, text string) {
 				),
 			),
 		)
+		//bar.SetPriority(i * maxEnumerate)
+		//bar.SetTotal(int64(((i + 1) * maxEnumerate) - 1), false)
 		// simulating some work
 		i := i
 		go func() {
 			defer wg.Done()
-			work(bar, total, i)
+			work(bar, total, i, cancel)
 		}()
 	}
 	// Waiting for passed &wg and for all bars to complete and flush
@@ -85,56 +93,15 @@ func consoleRun(maxEnumerate int, numFPGA int, text string) {
 	fmt.Println(result)
 }
 
-func consoleFail(maxEnumerate int, numFPGA int) {
-	var wg sync.WaitGroup
-
-	p := mpb.New(mpb.WithWaitGroup(&wg))
-
-	total, numBars := maxEnumerate, numFPGA
-	wg.Add(numBars)
-
-	for i := 0; i < numBars; i++ {
-		name := fmt.Sprintf("FPGA#%d:", i)
-		bar := p.AddBar(int64(total),
-			mpb.PrependDecorators(
-				// simple name decorator
-				decor.Name(name),
-				decor.CountersNoUnit("%d / %d", decor.WCSyncWidth),
-				// decor.DSyncWidth bit enables column width synchronization
-				//decor.Percentage(decor.WCSyncSpace),
-			),
-			mpb.AppendDecorators(
-				// replace ETA decorator with "done" message, OnComplete event
-				decor.OnComplete(
-					// ETA decorator with ewma age of 60
-					decor.EwmaETA(decor.ET_STYLE_GO, 60, decor.WCSyncWidth), "Failed",
-				),
-			),
-		)
-		// simulating some work
-		i := i
-		go func() {
-			defer wg.Done()
-			work(bar, total, i)
-		}()
-	}
-	// Waiting for passed &wg and for all bars to complete and flush
-	p.Wait()
-
-	fmt.Println("------------------------------------[ Decrypt Failed ]------------------------------------")
-	//fmt.Println("------------------------------[ result ]------------------------------")
-	//fmt.Println(result)
-}
-
 func main() {
 	// set variables
 	maxFPGA := 4
 
 	// Scan input arguments
-	text := flag.String("text", "", "암호 문자열")
+	text := flag.String("password", "", "암호 문자열")
 	numFPGA := flag.Int("numFPGA", 3, "FPGA 분산처리 숫자")
 	maxEnumerate := flag.Int("maxTry", 1000, "Number of FPGA Max Decrypt try")
-	success := flag.Bool("success", false, "decrypt success is true, fail is false")
+	//success := flag.Bool("success", false, "decrypt success is true, fail is false")
 
 	flag.Parse()
 
@@ -151,10 +118,5 @@ func main() {
 	fmt.Println("Input text : ", *text)
 	fmt.Println("Number of FPGA : ", *numFPGA)
 	fmt.Printf("Input max try value: %d\n", *maxEnumerate)
-
-	if *success == true {
-		consoleRun(*maxEnumerate, *numFPGA, *text)
-	} else {
-		consoleFail(*maxEnumerate, *numFPGA)
-	}
+	consoleRun(*maxEnumerate, *numFPGA, *text)
 }
