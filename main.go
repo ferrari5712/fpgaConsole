@@ -25,7 +25,7 @@ func hash(text string) string {
 func work(bar *mpb.Bar, total int, number int, cancel context.CancelFunc, password string, hashPassword string) {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	max := 100 * time.Millisecond
-	// FPGA card
+	// check FPGA card
 	fmt.Printf("FPGA #%d checking...\n", number)
 	time.Sleep(100 * time.Millisecond)
 	fmt.Printf("FPGA #%d ready!!!\n", number)
@@ -34,25 +34,18 @@ func work(bar *mpb.Bar, total int, number int, cancel context.CancelFunc, passwo
 	bar.SetCurrent(int64(number * total))
 	for i := 0; i < total; i++ {
 		// 중간에 password 찾게 되면 cancel
-		//if i > 1200 {
-		//	cancel()
-		//}
 		numPassword := password + strconv.Itoa((number*total)+i)
-		//fmt.Println(numPassword)
-		//fmt.Println(hash(numPassword))
 		resultPassword := hash(numPassword)
-		//if numPassword == password+"2787" {
-		//	cancel()
-		//	time.Sleep(500 * time.Millisecond)
-		//	fmt.Println(numPassword)
-		//	fmt.Println(resultPassword)
-		//}
+		// hash512 결과값과 입력된 hash의 값 비교 (대소문자 구분없이 비교)
 		if strings.EqualFold(resultPassword, hashPassword) {
 			cancel()
 			time.Sleep(500 * time.Millisecond)
-			fmt.Println("================================= find password =================================")
-			fmt.Println(" result : ", numPassword)
+			fmt.Println("======================================================== find password ========================================================")
+			fmt.Println(" [ Find FPGA ] : FPGA #", number)
+			fmt.Println(" [ Result ] : ", numPassword)
 		}
+
+		// 만약 FPGA 보드 중 한개가 결과를 찾았다면 다른 보드들의 작업을 중지
 		if bar.Completed() {
 			break
 		}
@@ -93,7 +86,7 @@ func consoleRun(maxEnumerate int, numFPGA int, text string, hashText string) {
 				// replace ETA decorator with "done" message, OnComplete event
 				decor.OnComplete(
 					// ETA decorator with ewma age of 60
-					decor.EwmaETA(decor.ET_STYLE_GO, 60, decor.WCSyncWidth), "Failed",
+					decor.EwmaETA(decor.ET_STYLE_GO, 60, decor.WCSyncWidth), "Done",
 				),
 			),
 		)
@@ -108,6 +101,7 @@ func consoleRun(maxEnumerate int, numFPGA int, text string, hashText string) {
 	}
 	// Waiting for passed &wg and for all bars to complete and flush
 	p.Wait()
+	fmt.Println(ctx)
 
 	if context.Canceled != nil {
 		//fmt.Println("context canceled")
