@@ -1,7 +1,7 @@
 package main
 
 import (
-	context "context"
+	"context"
 	"crypto/sha512"
 	"flag"
 	"fmt"
@@ -17,20 +17,17 @@ import (
 func hash(text string) string {
 	s := text
 	h1 := sha512.Sum512([]byte(s)) // 문자열의 SHA512 해시 값 추출
-	//fmt.Printf("%x\n", h1)
 	return fmt.Sprintf("%x", h1)
 }
 
 // pci 호출하는 부분
-func work(bar *mpb.Bar, total int, number int, cancel context.CancelFunc, password string, hashPassword string) {
+func work(bar *mpb.Bar, total int, number int, cancel context.CancelFunc, password string, hashPassword string, endFlag *bool) {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	max := 100 * time.Millisecond
 	// check FPGA card
 	fmt.Printf("FPGA #%d checking...\n", number)
 	time.Sleep(100 * time.Millisecond)
 	fmt.Printf("FPGA #%d ready!!!\n", number)
-	//bar.IncrBy(number * total)
-	//bar.SetRefill(int64(number * total))
 	bar.SetCurrent(int64(number * total))
 	for i := 0; i < total; i++ {
 		// 중간에 password 찾게 되면 cancel
@@ -39,10 +36,12 @@ func work(bar *mpb.Bar, total int, number int, cancel context.CancelFunc, passwo
 		// hash512 결과값과 입력된 hash의 값 비교 (대소문자 구분없이 비교)
 		if strings.EqualFold(resultPassword, hashPassword) {
 			cancel()
+			*endFlag = true
 			time.Sleep(500 * time.Millisecond)
-			fmt.Println("======================================================== find password ========================================================")
+			fmt.Println("======================================================== [ find password ] ========================================================")
 			fmt.Println(" [ Find FPGA ] : FPGA #", number)
 			fmt.Println(" [ Result ] : ", numPassword)
+			fmt.Println(" [ Hash ] : ", hashPassword)
 		}
 
 		// 만약 FPGA 보드 중 한개가 결과를 찾았다면 다른 보드들의 작업을 중지
@@ -58,9 +57,14 @@ func work(bar *mpb.Bar, total int, number int, cancel context.CancelFunc, passwo
 	}
 }
 
+//func CountersNoUnit(pairFmt string, wcc ...WC) Decorator {
+//	return decor.Counters(0, pairFmt, wcc...)
+//}
+
 func consoleRun(maxEnumerate int, numFPGA int, text string, hashText string) {
 	var wg sync.WaitGroup
 	//ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	var endFlag = false
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -72,6 +76,8 @@ func consoleRun(maxEnumerate int, numFPGA int, text string, hashText string) {
 	for i := 0; i < numBars; i++ {
 		name := fmt.Sprintf("FPGA#%d:", i)
 		barTotal := total*(i+1) - 1
+		//decorator1 := decor.CountersNoUnit("%d / %d", decor.WCSyncWidth)
+		//decorator1 = decorator1.Decor()
 		bar := p.AddBar(int64(barTotal),
 			//bar := p.AddBar(int64(((total+1)*(i+1))-1),
 			mpb.PrependDecorators(
@@ -96,24 +102,17 @@ func consoleRun(maxEnumerate int, numFPGA int, text string, hashText string) {
 		i := i
 		go func() {
 			defer wg.Done()
-			work(bar, total, i, cancel, text, hashText)
+			work(bar, total, i, cancel, text, hashText, &endFlag)
 		}()
 	}
 	// Waiting for passed &wg and for all bars to complete and flush
 	p.Wait()
-	fmt.Println(ctx)
 
-	if context.Canceled != nil {
+	if endFlag == true {
 		//fmt.Println("context canceled")
 	} else {
-		//fmt.Println("context not canceled")
-		fmt.Println("------------------------------------[ Decrypt Failed ]------------------------------------")
+		fmt.Println("------------------------------------ [ Decrypt Failed ] ------------------------------------")
 	}
-
-	//result := hash(text)
-	//fmt.Println("------------------------------------[ Decrypt Success ]------------------------------------")
-	//fmt.Println("------------------------------------[ result ]---------------------------------------------")
-	//fmt.Println(result)
 }
 
 func main() {
