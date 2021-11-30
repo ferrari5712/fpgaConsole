@@ -32,10 +32,14 @@ func work(bar *mpb.Bar, total int, number int, cancel context.CancelFunc, passwo
 	for i := 0; i < total; i++ {
 		// 중간에 password 찾게 되면 cancel
 		numPassword := password + strconv.Itoa((number*total)+i)
+
+		// hash function 실행. 다른 작업을 하고 싶으면 function 정의하고 이 부분을 수정
 		resultPassword := hash(numPassword)
-		// hash512 결과값과 입력된 hash의 값 비교 (대소문자 구분없이 비교)
+
+		// hash512 결과값과 입력된 hash의 값 비교 (대소문자 구분없이 비교) 해쉬 값을 찾았을 경우 출력후 다른 process들도 종료 시킨다.
 		if strings.EqualFold(resultPassword, hashPassword) {
 			cancel()
+			// endFlag를 true 해줘야 다른 multi process bar들도 멈추고 종료
 			*endFlag = true
 			time.Sleep(500 * time.Millisecond)
 			fmt.Println("======================================================== [ find password ] ========================================================")
